@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Masterpiece Bubbles - Precision Control</title>
+    <style>
+        :root { --gold: #fbff00; --bg-dark: rgba(10, 25, 47, 0.9); }
+        body { 
+            background: #050505 url('monalisa.png') no-repeat center center fixed;
+            background-size: cover !important; 
+            display: flex; flex-direction: column; align-items: center; 
+            min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; 
+            overflow: hidden; color: white; touch-action: none;
+        }
+        #main-layout { display: flex; flex-direction: row; align-items: flex-start; gap: 15px; padding: 10px; margin-top: 5px; }
+        @media (max-width: 800px) { #main-layout { flex-direction: column; align-items: center; } }
+        #game-container { position: relative; background: var(--bg-dark); padding: 12px; border-radius: 20px; border: 3px solid var(--gold); }
+        canvas { background: rgba(0, 0, 0, 0.7); border-radius: 12px; display: block; cursor: crosshair; }
+        .side-panel { width: 180px; background: var(--bg-dark); padding: 15px; border-radius: 20px; border: 2px solid var(--gold); display: flex; flex-direction: column; gap: 10px; }
+        @media (max-width: 800px) { .side-panel { width: 95%; flex-direction: row; flex-wrap: wrap; padding: 10px; } }
+        .stat-box { flex: 1; text-align: center; background: rgba(255,255,255,0.05); padding: 5px; border-radius: 10px; border-bottom: 2px solid var(--gold); }
+        .stat-label { font-size: 10px; color: var(--gold); }
+        .stat-value { font-size: 20px; font-weight: bold; }
+        button { padding: 10px; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; background: linear-gradient(to bottom, #fbff00, #c4a700); color: black; }
+        #overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; border-radius: 18px; }
+        .level-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .lvl-btn { width: 40px; height: 40px; border: 2px solid var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .locked { opacity: 0.2; }
+    </style>
+</head>
+<body>
+
+<audio id="bg-music" loop><source src="Chopin - Nocturne op.9 No.2.mp3" type="audio/mpeg"></audio>
+
+<div id="main-layout">
+    <div id="game-container">
+        <div id="overlay">
+            <h1 style="color:var(--gold); margin:0;">MASTERPIECE</h1>
+            <div id="menu-content" style="width: 80%; display: flex; flex-direction: column; gap: 10px; margin-top:20px;">
+                <button onclick="startLevel(unlockedLevel)">استمرار اللعب</button>
+                <button style="background:none; border:2px solid var(--gold); color:var(--gold);" onclick="showLevelsMenu()">المستويات</button>
+            </div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <div class="side-panel">
+        <div class="stat-box"><div class="stat-label">المستوى</div><div class="stat-value" id="cur-lvl">1</div></div>
+        <div class="stat-box"><div class="stat-label">النقاط</div><div class="stat-value" id="score-val">0</div></div>
+        <button onclick="showLevelsMenu()">المستويات</button>
+        <button id="mute-btn">🔊 Unmute</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const music = document.getElementById('bg-music');
+
+function resize() {
+    let w = window.innerWidth;
+    canvas.width = Math.min(w - 40, 420);
+    canvas.height = Math.min(window.innerHeight - 200, 580);
+}
+resize();
+
+const COLORS = ['#FF3E3E', '#3EFF3E', '#3E8BFF', '#FFFF3E', '#FF3EFF', '#FF8B3E'];
+const RADIUS = 20; const ROWS = 15; const COLS = 10;
+let grid = [], score = 0, currentLevel = 1, shots = 0;
+let unlockedLevel = parseInt(localStorage.getItem('art_v11_save')) || 1;
+let currentBubble = null, nextColor = COLORS[0], isShooting = false;
+let falling = [];
+
+// Pointer State
+let isPressing = false;
+let pX = 0, pY = 0;
+let sX = 0, sY = 0;
+
+function drawBubble(x, y, color, alpha = 1, r = RADIUS) {
+    ctx.save(); ctx.globalAlpha = alpha;
+    let grad = ctx.createRadialGradient(x - r/3, y - r/3, r/10, x, y, r);
+    grad.addColorStop(0, '#FFFFFF'); grad.addColorStop(0.3, color); grad.addColorStop(1, '#000000');
+    ctx.beginPath(); ctx.arc(x, y, r - 1, 0, Math.PI * 2);
+    ctx.fillStyle = grad; ctx.fill(); ctx.restore();
+}
+
+function initGrid() {
+    grid = [];
+    for (let r = 0; r < ROWS; r++) {
+        grid[r] = [];
+        let offset = (r % 2 !== 0) ? RADIUS : 0;
+        for (let c = 0; c < COLS; c++) {
+            grid[r][c] = { x: c * RADIUS * 2 + RADIUS + offset, y: r * RADIUS * 1.75 + RADIUS, color: '', active: false };
+        }
+    }
+}
+
+function drawAim() {
+    if (isShooting || !isPressing || !currentBubble) return;
+    let cx = canvas.width/2, cy = canvas.height-60;
+    // إذا كان الإصبع قريباً جداً من القاعدة لا نرسم التنشين
+    if (pY > cy - 20) return;
+
+    let ang = Math.atan2(pY - cy, pX - cx);
+    let vx = Math.cos(ang)*22, vy = Math.sin(ang)*22;
+    
+    ctx.save();
+    for(let i=0; i<30; i++) {
+        cx += vx; cy += vy;
+        if(cx < RADIUS || cx > canvas.width-RADIUS) vx *= -1;
+        if(cy < RADIUS || checkCollision(cx, cy)) break;
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(251, 255, 0, ${1 - i/30})`; ctx.fill();
+    }
+    ctx.restore();
+}
+
+function checkCollision(x, y) {
+    for(let r=0; r<ROWS; r++) {
+        for(let c=0; c<COLS; c++) {
+            if(grid[r][c].active && Math.hypot(x-grid[r][c].x, y-grid[r][c].y) < RADIUS*1.35) return true;
+        }
+    }
+    return false;
+}
+
+function snap() {
+    isShooting = false;
+    let bestDist = Infinity, tr = 0, tc = 0;
+    for(let r=0; r<ROWS; r++) {
+        for(let c=0; c<COLS; c++) {
+            if(!grid[r][c].active) {
+                let d = Math.hypot(currentBubble.x - grid[r][c].x, currentBubble.y - grid[r][c].y);
+                if(d < bestDist) { bestDist = d; tr = r; tc = c; }
+            }
+        }
+    }
+    grid[tr][tc].active = true; grid[tr][tc].color = currentBubble.color;
+    let matches = []; findMatch(tr, tc, grid[tr][tc].color, matches);
+    if(matches.length >= 3) {
+        matches.forEach(m => {
+            falling.push({x: grid[m.r][m.c].x, y: grid[m.r][m.c].y, color: grid[m.r][m.c].color, vx: (Math.random()-0.5)*10, vy: 2});
+            grid[m.r][m.c].active = false;
+        });
+        score += matches.length * 20;
+        dropFloaters();
+    }
+    shots++; if(shots % 8 === 0) pushRows();
+    currentBubble = { x: canvas.width/2, y: canvas.height-60, color: nextColor };
+    nextColor = COLORS[Math.floor(Math.random()*COLORS.length)];
+    checkWin(); updateUI();
+}
+
+function findMatch(r, c, col, list) {
+    let key = `${r},${c}`;
+    if(r<0||r>=ROWS||c<0||c>=COLS||!grid[r][c].active||grid[r][c].color!==col||list.some(m=>m.key===key)) return;
+    list.push({r, c, key});
+    let n = (r%2!==0) ? [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]] : [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]];
+    n.forEach(d => findMatch(d[0], d[1], col, list));
+}
+
+function dropFloaters() {
+    let conn = new Set();
+    for(let c=0; c<COLS; c++) if(grid[0][c].active) fillConn(0, c, conn);
+    for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) {
+        if(grid[r][c].active && !conn.has(`${r},${c}`)) {
+            falling.push({x:grid[r][c].x, y:grid[r][c].y, color:grid[r][c].color, vx:(Math.random()-0.5)*5, vy:4});
+            grid[r][c].active = false; score += 30;
+        }
+    }
+}
+
+function fillConn(r, c, set) {
+    if(r<0||r>=ROWS||c<0||c>=COLS||!grid[r][c].active||set.has(`${r},${c}`)) return;
+    set.add(`${r},${c}`);
+    let n = (r%2!==0) ? [[r,c-1],[r,c+1],[r-1,c],[r-1,c+1],[r+1,c],[r+1,c+1]] : [[r,c-1],[r,c+1],[r-1,c-1],[r-1,c],[r+1,c-1],[r+1,c]];
+    n.forEach(d => fillConn(d[0], d[1], set));
+}
+
+function pushRows() {
+    for(let r=ROWS-1; r>0; r--) for(let c=0; c<COLS; c++) { grid[r][c].active = grid[r-1][c].active; grid[r][c].color = grid[r-1][c].color; }
+    for(let c=0; c<COLS; c++) { grid[0][c].active = true; grid[0][c].color = COLORS[Math.floor(Math.random()*COLORS.length)]; }
+}
+
+function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath(); ctx.arc(canvas.width/2, canvas.height-60, 45, 0, Math.PI*2);
+    ctx.strokeStyle = "rgba(251, 255, 0, 0.2)"; ctx.stroke();
+    drawBubble(canvas.width/2 + 35, canvas.height-45, nextColor, 1, 12);
+
+    drawAim();
+    grid.forEach(row => row.forEach(b => { if(b.active) drawBubble(b.x, b.y, b.color); }));
+    
+    falling = falling.filter(f => {
+        f.x += f.vx; f.y += f.vy; f.vy += 0.4;
+        drawBubble(f.x, f.y, f.color, 0.6);
+        return f.y < canvas.height + 50;
+    });
+
+    if(currentBubble) {
+        if(isShooting) {
+            currentBubble.x += currentBubble.vx; currentBubble.y += currentBubble.vy;
+            if(currentBubble.x < RADIUS || currentBubble.x > canvas.width-RADIUS) currentBubble.vx *= -1;
+            if(currentBubble.y < RADIUS || checkCollision(currentBubble.x, currentBubble.y)) snap();
+        }
+        drawBubble(currentBubble.x, currentBubble.y, currentBubble.color);
+    }
+    requestAnimationFrame(loop);
+}
+
+// Logic التفرقة بين الضرب والتبديل
+function handleStart(x, y) {
+    if(isShooting || document.getElementById('overlay').style.display !== 'none') return;
+    let r = canvas.getBoundingClientRect();
+    isPressing = true;
+    sX = x - r.left; sY = y - r.top;
+    pX = sX; pY = sY;
+}
+
+function handleMove(x, y) {
+    if(!isPressing) return;
+    let r = canvas.getBoundingClientRect();
+    pX = x - r.left; pY = y - r.top;
+}
+
+function handleEnd() {
+    if(!isPressing) return;
+    isPressing = false;
+    
+    let dist = Math.hypot(pX - sX, pY - sY);
+    let shootThreshold = 25; // المسافة المطلوبة لاعتبار الحركة "تنشين"
+
+    // إذا لم يتحرك الإصبع كفاية -> تبديل
+    if (dist < shootThreshold) {
+        let t = currentBubble.color; currentBubble.color = nextColor; nextColor = t;
+    } 
+    // إذا تحرك الإصبع وكان الاتجاه للأعلى -> ضرب
+    else if (pY < canvas.height - 80) {
+        let ang = Math.atan2(pY - (canvas.height-60), pX - (canvas.width/2));
+        currentBubble.vx = Math.cos(ang)*18; currentBubble.vy = Math.sin(ang)*18;
+        isShooting = true;
+    }
+}
+
+canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+window.addEventListener('mouseup', handleEnd);
+
+canvas.addEventListener('touchstart', e => { e.preventDefault(); handleStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); handleEnd(); }, {passive: false});
+
+function startLevel(lv) {
+    currentLevel = lv; score = 0; shots = 0;
+    document.body.style.backgroundImage = "url('starry night.png')";
+    document.getElementById('overlay').style.display = 'none';
+    initGrid();
+    for(let r=0; r < 4 + Math.floor(lv/4); r++) for(let c=0; c<COLS; c++) {
+        grid[r][c].active = true; grid[r][c].color = COLORS[Math.floor(Math.random()*COLORS.length)];
+    }
+    currentBubble = { x: canvas.width/2, y: canvas.height-60, color: COLORS[Math.floor(Math.random()*COLORS.length)] };
+    music.play().catch(()=>{}); updateUI();
+}
+
+function showLevelsMenu() {
+    document.body.style.backgroundImage = "url('The Scream.png')";
+    document.getElementById('overlay').style.display = 'flex';
+    let h = '<div class="level-grid">';
+    for(let i=1; i<=12; i++) h += `<div class="lvl-btn ${i>unlockedLevel?'locked':''}" onclick="${i>unlockedLevel?'':'startLevel('+i+')'}">${i}</div>`;
+    h += '</div><button onclick="document.getElementById(\'overlay\').style.display=\'none\'">رجوع</button>';
+    document.getElementById('menu-content').innerHTML = h;
+}
+
+function checkWin() {
+    if(score >= 500 + currentLevel*200) {
+        unlockedLevel = Math.max(unlockedLevel, currentLevel + 1);
+        localStorage.setItem('art_v11_save', unlockedLevel);
+        showLevelsMenu();
+    }
+}
+
+function updateUI() {
+    document.getElementById('cur-lvl').innerText = currentLevel;
+    document.getElementById('score-val').innerText = score;
+}
+
+document.getElementById('mute-btn').onclick = () => {
+    music.muted = !music.muted;
+    document.getElementById('mute-btn').innerText = music.muted ? "🔊 Unmute" : "🔇 Mute";
+};
+
+initGrid(); loop();
+</script>
+</body>
+</html>
