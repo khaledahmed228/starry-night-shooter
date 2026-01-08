@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Masterpiece Bubbles - Precision Control</title>
+    <title>Masterpiece Bubbles - Smooth Touch</title>
     <style>
         :root { --gold: #fbff00; --bg-dark: rgba(10, 25, 47, 0.9); }
         body { 
@@ -13,20 +13,17 @@
             min-height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; 
             overflow: hidden; color: white; touch-action: none;
         }
-        #main-layout { display: flex; flex-direction: row; align-items: flex-start; gap: 15px; padding: 10px; margin-top: 5px; }
-        @media (max-width: 800px) { #main-layout { flex-direction: column; align-items: center; } }
-        #game-container { position: relative; background: var(--bg-dark); padding: 12px; border-radius: 20px; border: 3px solid var(--gold); }
-        canvas { background: rgba(0, 0, 0, 0.7); border-radius: 12px; display: block; cursor: crosshair; }
-        .side-panel { width: 180px; background: var(--bg-dark); padding: 15px; border-radius: 20px; border: 2px solid var(--gold); display: flex; flex-direction: column; gap: 10px; }
-        @media (max-width: 800px) { .side-panel { width: 95%; flex-direction: row; flex-wrap: wrap; padding: 10px; } }
-        .stat-box { flex: 1; text-align: center; background: rgba(255,255,255,0.05); padding: 5px; border-radius: 10px; border-bottom: 2px solid var(--gold); }
+        #main-layout { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; width: 100%; }
+        #game-container { position: relative; background: var(--bg-dark); padding: 10px; border-radius: 20px; border: 3px solid var(--gold); width: fit-content; }
+        canvas { background: rgba(0, 0, 0, 0.7); border-radius: 12px; display: block; touch-action: none; }
+        .side-panel { width: 95%; background: var(--bg-dark); padding: 10px; border-radius: 20px; border: 2px solid var(--gold); display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; justify-content: center; }
+        .stat-box { flex: 1; min-width: 70px; text-align: center; background: rgba(255,255,255,0.05); padding: 5px; border-radius: 10px; border-bottom: 2px solid var(--gold); }
         .stat-label { font-size: 10px; color: var(--gold); }
-        .stat-value { font-size: 20px; font-weight: bold; }
-        button { padding: 10px; border: none; border-radius: 20px; font-weight: bold; cursor: pointer; background: linear-gradient(to bottom, #fbff00, #c4a700); color: black; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+        button { padding: 8px 15px; border: none; border-radius: 15px; font-weight: bold; cursor: pointer; background: linear-gradient(to bottom, #fbff00, #c4a700); color: black; font-size: 13px; }
         #overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; border-radius: 18px; }
-        .level-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        .lvl-btn { width: 40px; height: 40px; border: 2px solid var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .locked { opacity: 0.2; }
+        .level-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
+        .lvl-btn { width: 40px; height: 40px; border: 2px solid var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
@@ -36,9 +33,9 @@
 <div id="main-layout">
     <div id="game-container">
         <div id="overlay">
-            <h1 style="color:var(--gold); margin:0;">MASTERPIECE</h1>
-            <div id="menu-content" style="width: 80%; display: flex; flex-direction: column; gap: 10px; margin-top:20px;">
-                <button onclick="startLevel(unlockedLevel)">استمرار اللعب</button>
+            <h1 style="color:var(--gold); margin-bottom:20px;">MASTERPIECE</h1>
+            <div id="menu-content" style="width: 80%; display: flex; flex-direction: column; gap: 10px;">
+                <button onclick="startLevel(unlockedLevel)">استمرار</button>
                 <button style="background:none; border:2px solid var(--gold); color:var(--gold);" onclick="showLevelsMenu()">المستويات</button>
             </div>
         </div>
@@ -58,24 +55,23 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const music = document.getElementById('bg-music');
 
-function resize() {
-    let w = window.innerWidth;
-    canvas.width = Math.min(w - 40, 420);
-    canvas.height = Math.min(window.innerHeight - 200, 580);
-}
-resize();
+// مقاسات ذكية للموبايل
+const screenW = window.innerWidth;
+const screenH = window.innerHeight;
+canvas.width = Math.min(screenW - 30, 400);
+canvas.height = Math.min(screenH - 180, 550);
 
 const COLORS = ['#FF3E3E', '#3EFF3E', '#3E8BFF', '#FFFF3E', '#FF3EFF', '#FF8B3E'];
-const RADIUS = 20; const ROWS = 15; const COLS = 10;
+const RADIUS = canvas.width / 21; // مقاس الكورة نسبي لعرض الشاشة
+const ROWS = 14; const COLS = 10;
 let grid = [], score = 0, currentLevel = 1, shots = 0;
-let unlockedLevel = parseInt(localStorage.getItem('art_v11_save')) || 1;
+let unlockedLevel = parseInt(localStorage.getItem('art_v12_save')) || 1;
 let currentBubble = null, nextColor = COLORS[0], isShooting = false;
 let falling = [];
 
-// Pointer State
+// سلاسة التنشين
 let isPressing = false;
-let pX = 0, pY = 0;
-let sX = 0, sY = 0;
+let pX = 0, pY = 0, sX = 0, sY = 0;
 
 function drawBubble(x, y, color, alpha = 1, r = RADIUS) {
     ctx.save(); ctx.globalAlpha = alpha;
@@ -97,21 +93,19 @@ function initGrid() {
 }
 
 function drawAim() {
-    if (isShooting || !isPressing || !currentBubble) return;
-    let cx = canvas.width/2, cy = canvas.height-60;
-    // إذا كان الإصبع قريباً جداً من القاعدة لا نرسم التنشين
-    if (pY > cy - 20) return;
-
+    if (isShooting || !isPressing || !currentBubble || pY > canvas.height - 80) return;
+    let cx = canvas.width/2, cy = canvas.height-50;
     let ang = Math.atan2(pY - cy, pX - cx);
     let vx = Math.cos(ang)*22, vy = Math.sin(ang)*22;
     
     ctx.save();
-    for(let i=0; i<30; i++) {
+    ctx.setLineDash([5, 8]);
+    for(let i=0; i<25; i++) {
         cx += vx; cy += vy;
         if(cx < RADIUS || cx > canvas.width-RADIUS) vx *= -1;
         if(cy < RADIUS || checkCollision(cx, cy)) break;
-        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(251, 255, 0, ${1 - i/30})`; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(251, 255, 0, ${1 - i/25})`; ctx.fill();
     }
     ctx.restore();
 }
@@ -119,7 +113,7 @@ function drawAim() {
 function checkCollision(x, y) {
     for(let r=0; r<ROWS; r++) {
         for(let c=0; c<COLS; c++) {
-            if(grid[r][c].active && Math.hypot(x-grid[r][c].x, y-grid[r][c].y) < RADIUS*1.35) return true;
+            if(grid[r][c].active && Math.hypot(x-grid[r][c].x, y-grid[r][c].y) < RADIUS*1.3) return true;
         }
     }
     return false;
@@ -140,14 +134,14 @@ function snap() {
     let matches = []; findMatch(tr, tc, grid[tr][tc].color, matches);
     if(matches.length >= 3) {
         matches.forEach(m => {
-            falling.push({x: grid[m.r][m.c].x, y: grid[m.r][m.c].y, color: grid[m.r][m.c].color, vx: (Math.random()-0.5)*10, vy: 2});
+            falling.push({x: grid[m.r][m.c].x, y: grid[m.r][m.c].y, color: grid[m.r][m.c].color, vx: (Math.random()-0.5)*8, vy: 2});
             grid[m.r][m.c].active = false;
         });
         score += matches.length * 20;
         dropFloaters();
     }
     shots++; if(shots % 8 === 0) pushRows();
-    currentBubble = { x: canvas.width/2, y: canvas.height-60, color: nextColor };
+    currentBubble = { x: canvas.width/2, y: canvas.height-50, color: nextColor };
     nextColor = COLORS[Math.floor(Math.random()*COLORS.length)];
     checkWin(); updateUI();
 }
@@ -185,9 +179,10 @@ function pushRows() {
 
 function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.beginPath(); ctx.arc(canvas.width/2, canvas.height-60, 45, 0, Math.PI*2);
-    ctx.strokeStyle = "rgba(251, 255, 0, 0.2)"; ctx.stroke();
-    drawBubble(canvas.width/2 + 35, canvas.height-45, nextColor, 1, 12);
+    // رسم المبدل الصغير
+    ctx.beginPath(); ctx.arc(canvas.width/2 + 40, canvas.height-35, 12, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(251, 255, 0, 0.1)"; ctx.fill();
+    drawBubble(canvas.width/2 + 40, canvas.height-35, nextColor, 1, 8);
 
     drawAim();
     grid.forEach(row => row.forEach(b => { if(b.active) drawBubble(b.x, b.y, b.color); }));
@@ -209,47 +204,37 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// Logic التفرقة بين الضرب والتبديل
-function handleStart(x, y) {
+// معالجة اللمس بدقة ونعومة
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
     if(isShooting || document.getElementById('overlay').style.display !== 'none') return;
-    let r = canvas.getBoundingClientRect();
     isPressing = true;
-    sX = x - r.left; sY = y - r.top;
+    let r = canvas.getBoundingClientRect();
+    sX = e.touches[0].clientX - r.left; sY = e.touches[0].clientY - r.top;
     pX = sX; pY = sY;
-}
+}, {passive: false});
 
-function handleMove(x, y) {
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
     if(!isPressing) return;
     let r = canvas.getBoundingClientRect();
-    pX = x - r.left; pY = y - r.top;
-}
+    pX = e.touches[0].clientX - r.left; pY = e.touches[0].clientY - r.top;
+}, {passive: false});
 
-function handleEnd() {
+canvas.addEventListener('touchend', e => {
+    e.preventDefault();
     if(!isPressing) return;
     isPressing = false;
-    
     let dist = Math.hypot(pX - sX, pY - sY);
-    let shootThreshold = 25; // المسافة المطلوبة لاعتبار الحركة "تنشين"
-
-    // إذا لم يتحرك الإصبع كفاية -> تبديل
-    if (dist < shootThreshold) {
+    if (dist < 20) {
         let t = currentBubble.color; currentBubble.color = nextColor; nextColor = t;
-    } 
-    // إذا تحرك الإصبع وكان الاتجاه للأعلى -> ضرب
-    else if (pY < canvas.height - 80) {
-        let ang = Math.atan2(pY - (canvas.height-60), pX - (canvas.width/2));
-        currentBubble.vx = Math.cos(ang)*18; currentBubble.vy = Math.sin(ang)*18;
+    } else if (pY < canvas.height - 70) {
+        let ang = Math.atan2(pY - (canvas.height-50), pX - (canvas.width/2));
+        currentBubble.vx = Math.cos(ang)*17; // سرعة ناعمة
+        currentBubble.vy = Math.sin(ang)*17;
         isShooting = true;
     }
-}
-
-canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
-window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
-window.addEventListener('mouseup', handleEnd);
-
-canvas.addEventListener('touchstart', e => { e.preventDefault(); handleStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('touchmove', e => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-canvas.addEventListener('touchend', e => { e.preventDefault(); handleEnd(); }, {passive: false});
+}, {passive: false});
 
 function startLevel(lv) {
     currentLevel = lv; score = 0; shots = 0;
@@ -259,7 +244,7 @@ function startLevel(lv) {
     for(let r=0; r < 4 + Math.floor(lv/4); r++) for(let c=0; c<COLS; c++) {
         grid[r][c].active = true; grid[r][c].color = COLORS[Math.floor(Math.random()*COLORS.length)];
     }
-    currentBubble = { x: canvas.width/2, y: canvas.height-60, color: COLORS[Math.floor(Math.random()*COLORS.length)] };
+    currentBubble = { x: canvas.width/2, y: canvas.height-50, color: COLORS[Math.floor(Math.random()*COLORS.length)] };
     music.play().catch(()=>{}); updateUI();
 }
 
@@ -275,7 +260,7 @@ function showLevelsMenu() {
 function checkWin() {
     if(score >= 500 + currentLevel*200) {
         unlockedLevel = Math.max(unlockedLevel, currentLevel + 1);
-        localStorage.setItem('art_v11_save', unlockedLevel);
+        localStorage.setItem('art_v12_save', unlockedLevel);
         showLevelsMenu();
     }
 }
